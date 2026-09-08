@@ -1,0 +1,74 @@
+// Theme Park Trip Planner — data model
+//
+// Uses the libSQL/Turso driver adapter so the SAME code + schema runs against a
+// local SQLite file in dev (DATABASE_URL="file:./dev.db") and a hosted Turso
+// database in production (DATABASE_URL="libsql://<db>.turso.io" + DATABASE_AUTH_TOKEN).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  // Per-user Anthropic API key, entered in Settings. Encrypted at rest
+  // (AES-256-GCM, key derived from AUTH_SECRET). Never returned to the client.
+  aiKeyCipher String?
+  aiKeyHint   String? // last 4 chars, for display only
+  aiModel     String? // optional model override
+
+  travellers Traveller[]
+  plans      Plan[]
+  checklist  ChecklistState[]
+}
+
+model Traveller {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  birthdate       DateTime
+  heightInInches  Int?
+  thrillTolerance String   @default("medium") // low | medium | high
+  needsMiddayBreak Boolean @default(false)
+  mobilityNotes   String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Plan {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parkId        Int
+  parkName      String
+  date          DateTime
+  inputJson     String   // serialized PlannerInput
+  itineraryJson String   // serialized Itinerary (array of blocks)
+  summary       String?  // AI concierge summary (markdown)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ChecklistState {
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemKey String
+  done    Boolean @default(false)
+
+  @@unique([userId, itemKey])
+  @@index([userId])
+}
