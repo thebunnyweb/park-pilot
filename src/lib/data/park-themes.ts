@@ -144,3 +144,25 @@ function fallbackTheme(parkId: number, parkName: string): ParkTheme {
 export function getParkTheme(parkId: number, parkName: string): ParkTheme {
   return PARK_THEMES[parkId] ?? fallbackTheme(parkId, parkName);
 }
+
+/**
+ * Precise Wikipedia page titles for the curated parks — queue-times.com's
+ * names ("Disney Magic Kingdom") don't always match Wikipedia's ("Magic
+ * Kingdom"), so a fuzzy search can land on the wrong disambiguation page.
+ * Every other park falls back to searching its queue-times name directly.
+ */
+export const PARK_WIKI_TITLES: Record<number, string> = {
+  6: "Magic Kingdom",
+  5: "Epcot",
+  7: "Disney's Hollywood Studios",
+  8: "Disney's Animal Kingdom",
+  16: "Disneyland Park (Anaheim)",
+  17: "Disney California Adventure",
+  64: "Islands of Adventure",
+  65: "Universal Studios Florida",
+  66: "Universal Studios Hollywood",
+};
+
+export function wikiQueryFor(parkId: number, parkName: string): string {
+  return PARK_WIKI_TITLES[parkId] ?? parkName;
+}

@@ -4,6 +4,7 @@ import { CalendarClock, MapPin } from "lucide-react";
 import Link from "next/link";
 import { ParkHero } from "@/components/park-hero";
 import { ParkPicker } from "@/components/park-picker";
+import { ParkRideGallery } from "@/components/park-ride-gallery";
 import { ParkThemeProvider } from "@/components/park-theme-provider";
 import { WaitBoard } from "@/components/wait-board";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export default function DashboardPage() {
             parkName={park.name}
             subtitle={park.country ? `${park.country}${park.curated ? " · Curated data" : ""}` : undefined}
           />
+          <ParkRideGallery parkId={park.id} />
           <WaitBoard parkId={park.id} />
         </>
       )}

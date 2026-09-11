@@ -213,3 +213,36 @@ export function useTrip(id: string | undefined) {
     enabled: Boolean(id),
   });
 }
+
+export interface WikiImage {
+  title: string;
+  imageUrl: string;
+  pageUrl: string;
+}
+
+export function useParkPhoto(parkId: number | null, parkName: string | null) {
+  return useQuery({
+    queryKey: ["park-photo", parkId],
+    queryFn: () =>
+      apiGet<{ image: WikiImage | null }>(
+        `/api/media/park-photo?parkId=${parkId}&parkName=${encodeURIComponent(parkName ?? "")}`,
+      ),
+    enabled: parkId != null && Boolean(parkName),
+    staleTime: 1000 * 60 * 60 * 24,
+    retry: false,
+  });
+}
+
+export function useRidePhotos(titles: string[]) {
+  const key = [...titles].sort().join("|");
+  return useQuery({
+    queryKey: ["ride-photos", key],
+    queryFn: () =>
+      apiSend<{ images: Record<string, WikiImage | null> }>("/api/media/ride-photos", "POST", {
+        titles,
+      }),
+    enabled: titles.length > 0,
+    staleTime: 1000 * 60 * 60 * 24,
+    retry: false,
+  });
+}

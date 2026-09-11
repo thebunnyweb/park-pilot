@@ -50,6 +50,29 @@ export function applySearch(provider: ProviderId, model: string, enabled: boolea
   return model;
 }
 
+/**
+ * Every provider/model caps `max_tokens` differently (and some, like Groq's
+ * gpt-oss-120b, cap it well below what a full itinerary can need) — there's no
+ * reliable table of these to hardcode. Instead: ask for a generous amount, and
+ * if the API rejects it with "max X" in the error, retry once at that limit
+ * rather than failing the whole request.
+ */
+async function createChatCompletion(
+  client: OpenAI,
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  try {
+    return await client.chat.completions.create(params);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const cap = Number(msg.match(/max(?:imum)?[^\d]{0,20}(\d{3,7})/i)?.[1]);
+    if (cap > 0 && params.max_tokens && cap < params.max_tokens) {
+      return await client.chat.completions.create({ ...params, max_tokens: cap });
+    }
+    throw err;
+  }
+}
+
 interface JsonCallOpts {
   apiKey: string;
   baseUrl: string;
@@ -77,7 +100,7 @@ export async function callJson<T>({
   searchEnabled = false,
 }: JsonCallOpts): Promise<{ data: T; model: string }> {
   const effectiveModel = applySearch(provider, model, searchEnabled);
-  const res = await makeClient(apiKey, baseUrl).chat.completions.create({
+  const res = await createChatCompletion(makeClient(apiKey, baseUrl), {
     model: effectiveModel,
     max_tokens: maxTokens,
     reasoning_effort: reasoningEffortFor(provider, effectiveModel),
@@ -102,7 +125,7 @@ export async function callJson<T>({
 
 /** A cheap call used by Settings to confirm a key + model + endpoint work. */
 export async function verifyKey(apiKey: string, model: string, baseUrl: string): Promise<void> {
-  const res = await makeClient(apiKey, baseUrl).chat.completions.create({
+  const res = await createChatCompletion(makeClient(apiKey, baseUrl), {
     model,
     max_tokens: 8,
     messages: [{ role: "user", content: "Reply with the single word: ok" }],
