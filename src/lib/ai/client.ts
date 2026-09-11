@@ -51,11 +51,33 @@ export function applySearch(provider: ProviderId, model: string, enabled: boolea
 }
 
 /**
+ * Pulls the model's real output-token cap out of a rejection message like:
+ *   "400 `max_tokens` must be less than or equal to `8192`, the maximum
+ *    value for `max_tokens` is less than the `context_window` for this model"
+ * Deliberately loose (first 3-7 digit number, anywhere in the message) rather
+ * than anchored near the word "max" — real provider error prose puts far more
+ * than a few characters between the word and the number, and being too strict
+ * here means the retry below silently never fires (which is exactly what
+ * shipped the first time).
+ */
+export function parseMaxTokensCap(message: string): number | null {
+  if (!/max[_ ]?tokens|context[_ ]?window/i.test(message)) return null;
+  // Providers quote the actual limit in backticks; prefer that so a leading
+  // "400 " HTTP status prefix (itself a 3-digit number) never gets mistaken
+  // for the cap.
+  const quoted = message.match(/`(\d{3,7})`/);
+  if (quoted) return Number(quoted[1]);
+  const withoutStatusPrefix = message.replace(/^\d{3}\s+/, "");
+  const match = withoutStatusPrefix.match(/(\d{3,7})/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
  * Every provider/model caps `max_tokens` differently (and some, like Groq's
  * gpt-oss-120b, cap it well below what a full itinerary can need) — there's no
  * reliable table of these to hardcode. Instead: ask for a generous amount, and
- * if the API rejects it with "max X" in the error, retry once at that limit
- * rather than failing the whole request.
+ * if the API rejects it, parse the real cap out of the error and retry once
+ * at that limit rather than failing the whole request.
  */
 async function createChatCompletion(
   client: OpenAI,
@@ -65,8 +87,8 @@ async function createChatCompletion(
     return await client.chat.completions.create(params);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const cap = Number(msg.match(/max(?:imum)?[^\d]{0,20}(\d{3,7})/i)?.[1]);
-    if (cap > 0 && params.max_tokens && cap < params.max_tokens) {
+    const cap = parseMaxTokensCap(msg);
+    if (cap && params.max_tokens && cap < params.max_tokens) {
       return await client.chat.completions.create({ ...params, max_tokens: cap });
     }
     throw err;
