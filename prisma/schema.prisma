@@ -20,11 +20,16 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  // Per-user Anthropic API key, entered in Settings. Encrypted at rest
-  // (AES-256-GCM, key derived from AUTH_SECRET). Never returned to the client.
+  // Per-user LLM API key, entered in Settings. Encrypted at rest (AES-256-GCM,
+  // key derived from AUTH_SECRET). Never returned to the client. The app talks
+  // to every provider via the OpenAI-compatible chat completions shape, so any
+  // provider that speaks it (Anthropic, OpenAI, Groq, Google, OpenRouter, or a
+  // custom endpoint) works from the same code path.
   aiKeyCipher String?
   aiKeyHint   String? // last 4 chars, for display only
-  aiModel     String? // optional model override
+  aiProvider  String? // anthropic | openai | groq | google | openrouter | custom
+  aiModel     String? // model id for the chosen provider
+  aiBaseUrl   String? // only used when aiProvider = "custom"
 
   travellers Traveller[]
   plans      Plan[]

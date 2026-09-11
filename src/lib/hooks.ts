@@ -148,10 +148,20 @@ export function useAiStatus() {
 export interface AiSettings {
   hasUserKey: boolean;
   hint: string | null;
+  provider: string | null;
   model: string | null;
-  effective: { model: string; source: "user" | "env" } | null;
+  baseUrl: string | null;
+  effective: { model: string; source: "user" | "env"; provider: string; baseUrl: string } | null;
   envFallbackAvailable: boolean;
-  defaultModel: string;
+  providers: {
+    id: string;
+    label: string;
+    baseUrl: string;
+    defaultModel: string;
+    keyPlaceholder: string;
+    keysUrl: string;
+    note?: string;
+  }[];
 }
 
 export function useAiSettings() {

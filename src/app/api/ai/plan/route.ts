@@ -1,5 +1,5 @@
 import { handleError, json, requireUserId } from "@/lib/api";
-import { callJson } from "@/lib/ai/anthropic";
+import { callJson } from "@/lib/ai/client";
 import { getAiConfig } from "@/lib/ai/keys";
 import { PLANNER_SYSTEM, plannerUserMessage } from "@/lib/ai/prompts";
 import { buildPlannerContext } from "@/lib/planner/context";
