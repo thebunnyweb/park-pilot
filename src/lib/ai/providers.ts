@@ -39,10 +39,10 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     id: "groq",
     label: "Groq",
     baseUrl: "https://api.groq.com/openai/v1",
-    defaultModel: "llama-3.3-70b-versatile",
+    defaultModel: "openai/gpt-oss-20b",
     keyPlaceholder: "gsk_…",
     keysUrl: "https://console.groq.com/keys",
-    note: "Free tier, no card required.",
+    note: "Free tier, no card required. Groq deprecates models often — use \"Fetch models\" below to see what's currently live on your account.",
   },
   google: {
     id: "google",

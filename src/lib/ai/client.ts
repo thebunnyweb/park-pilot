@@ -60,6 +60,19 @@ export async function verifyKey(apiKey: string, model: string, baseUrl: string):
   }
 }
 
+/**
+ * List models the given key can actually use, via the standard GET /models
+ * endpoint (supported by OpenAI, Groq, and OpenRouter; best-effort elsewhere).
+ * Lets Settings offer real, currently-valid model ids instead of a guessed
+ * default that can silently go stale when a provider deprecates a model.
+ */
+export async function listModels(apiKey: string, baseUrl: string): Promise<string[]> {
+  const page = await makeClient(apiKey, baseUrl).models.list();
+  const ids = page.data.map((m) => m.id);
+  ids.sort((a, b) => a.localeCompare(b));
+  return ids;
+}
+
 function extractJson<T>(text: string): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1] : text;

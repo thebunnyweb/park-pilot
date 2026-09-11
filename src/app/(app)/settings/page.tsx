@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, KeyRound, ListTree, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,13 +28,41 @@ export default function SettingsPage() {
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
 
   // Once we know the current provider, default the picker to it.
   useEffect(() => {
     if (data?.provider) setProvider(data.provider as ProviderId);
   }, [data?.provider]);
 
+  // Switching providers invalidates any model list we'd fetched for the old one.
+  useEffect(() => {
+    setFetchedModels([]);
+  }, [provider]);
+
   const def = data?.providers.find((p) => p.id === provider);
+
+  async function fetchModels() {
+    if (!apiKey.trim()) {
+      toast.error("Enter an API key first.");
+      return;
+    }
+    setFetchingModels(true);
+    try {
+      const res = await apiSend<{ models: string[] }>("/api/settings/ai/models", "POST", {
+        provider,
+        apiKey: apiKey.trim(),
+        baseUrl: provider === "custom" ? baseUrl.trim() : undefined,
+      });
+      setFetchedModels(res.models);
+      toast.success(`Found ${res.models.length} models`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not list models");
+    } finally {
+      setFetchingModels(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -173,16 +201,43 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="model">Model</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="model">Model</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-1.5 text-xs"
+                    onClick={fetchModels}
+                    disabled={fetchingModels || !apiKey.trim()}
+                  >
+                    {fetchingModels ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <ListTree className="h-3 w-3" />
+                    )}
+                    Fetch models
+                  </Button>
+                </div>
                 <Input
                   id="model"
+                  list="model-options"
                   placeholder={def?.defaultModel || "model id"}
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                 />
+                {fetchedModels.length > 0 && (
+                  <datalist id="model-options">
+                    {fetchedModels.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Leave blank for the default shown above. The key is encrypted before
-                  storage and never shown again.
+                  {fetchedModels.length > 0
+                    ? `${fetchedModels.length} models available on this key — start typing to see suggestions.`
+                    : "Leave blank for the default shown above, or enter your API key and click \"Fetch models\" to see what's actually live on your account."}{" "}
+                  The key is encrypted before storage and never shown again.
                 </p>
               </div>
               <Button
