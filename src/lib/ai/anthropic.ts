@@ -1,29 +1,39 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export function makeAnthropic(apiKey: string): Anthropic {
-  return new Anthropic({ apiKey });
+export function makeAnthropic(apiKey: string, baseURL?: string): Anthropic {
+  return new Anthropic({
+    apiKey,
+    ...(baseURL ? { baseURL } : {}),
+    // OpenRouter uses these for routing/analytics; harmless for api.anthropic.com.
+    defaultHeaders: {
+      "HTTP-Referer": "https://github.com/thebunnyweb/park-pilot",
+      "X-Title": "Park Pilot",
+    },
+  });
 }
 
 interface JsonCallOpts {
   apiKey: string;
   model: string;
+  baseUrl?: string;
   system: string;
   user: string;
   maxTokens?: number;
 }
 
 /**
- * Call Claude and parse a single JSON object out of the response. Tolerates the
- * model wrapping JSON in prose or a code fence.
+ * Call the model and parse a single JSON object out of the response. Tolerates
+ * the model wrapping JSON in prose or a code fence.
  */
 export async function callJson<T>({
   apiKey,
   model,
+  baseUrl,
   system,
   user,
   maxTokens = 8000,
 }: JsonCallOpts): Promise<{ data: T; model: string }> {
-  const res = await makeAnthropic(apiKey).messages.create({
+  const res = await makeAnthropic(apiKey, baseUrl).messages.create({
     model,
     max_tokens: maxTokens,
     system,
@@ -39,9 +49,9 @@ export async function callJson<T>({
   return { data: extractJson<T>(text), model };
 }
 
-/** A cheap call used by Settings to confirm a key works. */
-export async function verifyKey(apiKey: string, model: string): Promise<void> {
-  await makeAnthropic(apiKey).messages.create({
+/** A cheap call used by Settings to confirm a key + model work. */
+export async function verifyKey(apiKey: string, model: string, baseUrl?: string): Promise<void> {
+  await makeAnthropic(apiKey, baseUrl).messages.create({
     model,
     max_tokens: 8,
     messages: [{ role: "user", content: "Reply with the single word: ok" }],

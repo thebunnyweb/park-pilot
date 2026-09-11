@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     const { data, model } = await callJson<ModelPlan>({
       apiKey: ai.key,
       model: ai.model,
+      baseUrl: ai.baseUrl,
       system: REFINE_SYSTEM,
       user: refineUserMessage(itinerary, instruction, context),
     });

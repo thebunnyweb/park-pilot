@@ -72,6 +72,7 @@ export async function POST(req: Request) {
     const { data, model } = await callJson<ModelPlan>({
       apiKey: ai.key,
       model: ai.model,
+      baseUrl: ai.baseUrl,
       system: PLANNER_SYSTEM,
       user: plannerUserMessage(context),
     });

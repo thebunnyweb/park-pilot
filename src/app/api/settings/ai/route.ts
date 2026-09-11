@@ -1,6 +1,13 @@
 import { handleError, json, requireUserId } from "@/lib/api";
 import { verifyKey } from "@/lib/ai/anthropic";
-import { DEFAULT_MODEL, getAiConfig, looksLikeAnthropicKey } from "@/lib/ai/keys";
+import {
+  DEFAULT_MODEL,
+  OPENROUTER_BASE_URL,
+  defaultModelFor,
+  getAiConfig,
+  looksLikeSupportedKey,
+  providerForKey,
+} from "@/lib/ai/keys";
 import { encryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +23,9 @@ export async function GET() {
       hasUserKey: Boolean(user?.aiKeyHint),
       hint: user?.aiKeyHint ?? null,
       model: user?.aiModel ?? null,
-      effective: cfg ? { model: cfg.model, source: cfg.source } : null,
+      effective: cfg
+        ? { model: cfg.model, source: cfg.source, provider: cfg.provider }
+        : null,
       envFallbackAvailable: Boolean(process.env.ANTHROPIC_API_KEY?.trim()),
       defaultModel: DEFAULT_MODEL,
     });
@@ -32,15 +41,25 @@ export async function PUT(req: Request) {
     const apiKey = String(body?.apiKey ?? "").trim();
     const model = body?.model ? String(body.model).trim() : "";
 
-    if (!looksLikeAnthropicKey(apiKey)) {
-      return json({ error: "That does not look like an Anthropic API key (sk-ant-…)." }, 400);
+    if (!looksLikeSupportedKey(apiKey)) {
+      return json(
+        { error: "Use an Anthropic key (sk-ant-…) or an OpenRouter key (sk-or-…)." },
+        400,
+      );
     }
 
+    const provider = providerForKey(apiKey);
+    const baseUrl = provider === "openrouter" ? OPENROUTER_BASE_URL : undefined;
+    const modelToUse = model || defaultModelFor(provider);
+
     try {
-      await verifyKey(apiKey, model || DEFAULT_MODEL);
+      await verifyKey(apiKey, modelToUse, baseUrl);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Key verification failed";
-      return json({ error: `Anthropic rejected the key: ${msg}` }, 400);
+      return json(
+        { error: `${provider === "openrouter" ? "OpenRouter" : "Anthropic"} rejected the request: ${msg}` },
+        400,
+      );
     }
 
     await prisma.user.update({
@@ -52,7 +71,7 @@ export async function PUT(req: Request) {
       },
     });
 
-    return json({ ok: true, hint: apiKey.slice(-4), model: model || null });
+    return json({ ok: true, hint: apiKey.slice(-4), model: model || null, provider });
   } catch (err) {
     return handleError(err);
   }

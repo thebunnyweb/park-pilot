@@ -59,11 +59,12 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <KeyRound className="h-4 w-4" />
-            Anthropic API key
+            AI provider key
           </CardTitle>
           <CardDescription>
-            The live wait board works without this. The AI touring planner needs a key so it
-            can turn today&apos;s waits and your travellers into a plan.
+            The live wait board works without this. The AI touring planner needs a key —
+            an <strong>Anthropic</strong> key (<code>sk-ant-…</code>) or an{" "}
+            <strong>OpenRouter</strong> key (<code>sk-or-…</code>), auto-detected.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -95,16 +96,25 @@ export default function SettingsPage() {
               ) : (
                 <Alert>
                   <AlertDescription>
-                    No key yet — the planner is locked. Create one at{" "}
+                    No key yet — the planner is locked. Get an{" "}
                     <a
                       className="underline"
                       href="https://console.anthropic.com/settings/keys"
                       target="_blank"
                       rel="noreferrer"
                     >
-                      console.anthropic.com
-                    </a>
-                    .
+                      Anthropic
+                    </a>{" "}
+                    or{" "}
+                    <a
+                      className="underline"
+                      href="https://openrouter.ai/keys"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      OpenRouter
+                    </a>{" "}
+                    key.
                   </AlertDescription>
                 </Alert>
               )}
@@ -115,7 +125,7 @@ export default function SettingsPage() {
                   id="key"
                   type="password"
                   autoComplete="off"
-                  placeholder="sk-ant-…"
+                  placeholder="sk-ant-…  or  sk-or-…"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -129,8 +139,18 @@ export default function SettingsPage() {
                   onChange={(e) => setModel(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Leave blank for the default. The key is encrypted before it is stored and is
-                  never shown again.
+                  Leave blank for the default. For an OpenRouter key, paste a model id from{" "}
+                  <a
+                    className="underline"
+                    href="https://openrouter.ai/models?max_price=0"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    the $0 model list
+                  </a>{" "}
+                  (slugs change often — e.g. <code>meta-llama/llama-3.3-70b-instruct:free</code>)
+                  or a paid one like <code>anthropic/claude-haiku-4.5</code>. The key is
+                  encrypted before storage and never shown again.
                 </p>
               </div>
               <Button onClick={save} disabled={saving || !apiKey.trim()} className="gap-1.5">
