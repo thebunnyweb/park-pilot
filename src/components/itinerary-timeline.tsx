@@ -2,8 +2,13 @@
 
 import {
   Armchair,
+  Camera,
   Clock,
   Footprints,
+  Gem,
+  MapPin,
+  PartyPopper,
+  ShoppingBag,
   Sparkles,
   Ticket,
   TriangleAlert,
@@ -23,17 +28,24 @@ const ICON: Record<string, typeof Clock> = {
   walk: Footprints,
   flex: Clock,
   depart: Clock,
+  photo: Camera,
+  shop: ShoppingBag,
+  gem: Gem,
+  event: PartyPopper,
 };
 
 export function ItineraryTimeline({
   blocks,
   warnings,
   nowMinutes,
+  parkNames,
 }: {
   blocks: ItineraryBlock[];
   warnings?: string[];
   /** minutes-since-midnight of "now" — when set, highlights the current block */
   nowMinutes?: number;
+  /** parkId -> name, only needed on a park-hopping day to label which park each block is at */
+  parkNames?: Record<number, string>;
 }) {
   return (
     <div className="space-y-4">
@@ -73,6 +85,7 @@ export function ItineraryTimeline({
                   "rounded-lg border bg-card p-3",
                   current && "border-primary ring-1 ring-primary",
                   b.type === "break" && "bg-muted/40",
+                  b.type === "event" && "border-amber-500/50 bg-amber-500/5",
                 )}
               >
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -85,6 +98,12 @@ export function ItineraryTimeline({
                   )}
                   {current && (
                     <Badge className="h-4 px-1 text-[10px]">now</Badge>
+                  )}
+                  {parkNames && b.parkId && parkNames[b.parkId] && (
+                    <Badge variant="outline" className="h-4 gap-0.5 px-1 text-[10px]">
+                      <MapPin className="h-2.5 w-2.5" />
+                      {parkNames[b.parkId]}
+                    </Badge>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">

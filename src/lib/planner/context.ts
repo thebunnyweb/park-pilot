@@ -23,13 +23,23 @@ export interface ContextRide {
   eligibleForWholeParty?: boolean;
 }
 
-export interface PlannerContext {
-  park: { id: number; name: string; date: string };
-  hours: { open: string; close: string; arrival: string; departure: string };
+interface ParkBlock {
+  id: number;
+  name: string;
+  hours: { open: string; close: string };
   ropeDropAdvice: string;
   landAdjacency?: Record<string, Record<string, number>>;
   events?: { name: string; approxTime: string; note?: string }[];
   parkNotes?: string[];
+  rides: ContextRide[];
+  hasCuratedData: boolean;
+}
+
+export interface PlannerContext {
+  park: ParkBlock & { date: string };
+  /** Present only on a park-hopping day — the second half of the day happens here. */
+  secondPark?: ParkBlock & { switchTime: string };
+  hours: { arrival: string; departure: string };
   party: {
     size: number;
     youngestAgeYears: number;
@@ -46,10 +56,8 @@ export interface PlannerContext {
   laneStrategy: string;
   middayBreak: boolean;
   userNotes?: string;
-  rides: ContextRide[];
   demandNow: number;
   crowdCurveNote: string;
-  hasCuratedData: boolean;
 }
 
 function minPartyHeight(input: PlannerInput): number | null {
@@ -59,24 +67,21 @@ function minPartyHeight(input: PlannerInput): number | null {
   return heights.length ? Math.min(...heights) : null;
 }
 
-export function buildPlannerContext(
-  input: PlannerInput,
+function buildParkBlock(
+  parkId: number,
+  parkName: string,
   liveRides: LiveRide[],
-): PlannerContext {
-  const meta = getParkMeta(input.parkId);
-  const overlay = getOverlay(input.parkId);
-  const mustDo = new Set(input.mustDoRideIds);
-  const skip = new Set(input.skipRideIds);
-
-  const youngest = Math.min(
-    ...(input.travellers.length ? input.travellers.map((t) => t.ageYears) : [99]),
-  );
-  const minHeight = minPartyHeight(input);
+  mustDo: Set<number>,
+  skip: Set<number>,
+  minHeight: number | null,
+  youngest: number,
+): ParkBlock {
+  const meta = getParkMeta(parkId);
+  const overlay = getOverlay(parkId);
 
   const rides: ContextRide[] = liveRides.map((r) => {
     const o = overlay?.[r.id];
-    const heightOk =
-      !o || o.heightIn === 0 || (minHeight !== null && minHeight >= o.heightIn);
+    const heightOk = !o || o.heightIn === 0 || (minHeight !== null && minHeight >= o.heightIn);
     const ageOk = !o || o.toddlerFriendly || youngest >= 4;
     return {
       id: r.id,
@@ -104,17 +109,61 @@ export function buildPlannerContext(
   });
 
   return {
-    park: { id: input.parkId, name: input.parkName, date: input.date },
-    hours: {
-      open: meta.typicalOpen,
-      close: meta.typicalClose,
-      arrival: input.arrival,
-      departure: input.departure,
-    },
+    id: parkId,
+    name: parkName,
+    hours: { open: meta.typicalOpen, close: meta.typicalClose },
     ropeDropAdvice: meta.ropeDropAdvice,
     landAdjacency: meta.landAdjacency,
     events: meta.events,
     parkNotes: meta.notes,
+    rides,
+    hasCuratedData: overlay !== null,
+  };
+}
+
+export function buildPlannerContext(
+  input: PlannerInput,
+  liveRides: LiveRide[],
+  secondParkLiveRides?: LiveRide[],
+): PlannerContext {
+  const mustDo = new Set(input.mustDoRideIds);
+  const skip = new Set(input.skipRideIds);
+
+  const youngest = Math.min(
+    ...(input.travellers.length ? input.travellers.map((t) => t.ageYears) : [99]),
+  );
+  const minHeight = minPartyHeight(input);
+
+  const park = buildParkBlock(
+    input.parkId,
+    input.parkName,
+    liveRides,
+    mustDo,
+    skip,
+    minHeight,
+    youngest,
+  );
+
+  const secondPark =
+    input.secondPark && secondParkLiveRides
+      ? {
+          ...buildParkBlock(
+            input.secondPark.parkId,
+            input.secondPark.parkName,
+            secondParkLiveRides,
+            mustDo,
+            skip,
+            minHeight,
+            youngest,
+          ),
+          switchTime: input.secondPark.switchTime,
+        }
+      : undefined;
+
+  return {
+    park: { ...park, date: input.date },
+    secondPark,
+    hours: { arrival: input.arrival, departure: input.departure },
     party: {
       size: input.travellers.length,
       youngestAgeYears: youngest === 99 ? 30 : youngest,
@@ -131,10 +180,8 @@ export function buildPlannerContext(
     laneStrategy: input.laneStrategy,
     middayBreak: input.middayBreak,
     userNotes: input.notes,
-    rides,
     demandNow: Number(relativeDemand(nowHHmm()).toFixed(2)),
     crowdCurveNote: CROWD_CURVE_NOTE,
-    hasCuratedData: overlay !== null,
   };
 }
 

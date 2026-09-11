@@ -134,13 +134,19 @@ export function usePlans() {
   });
 }
 
+export interface AiStatus {
+  enabled: boolean;
+  model: string | null;
+  source: "user" | "env" | null;
+  provider: string | null;
+  supportsSearch: boolean;
+  searchNote?: string;
+}
+
 export function useAiStatus() {
   return useQuery({
     queryKey: ["ai-status"],
-    queryFn: () =>
-      apiGet<{ enabled: boolean; model: string | null; source: "user" | "env" | null }>(
-        "/api/ai/status",
-      ),
+    queryFn: () => apiGet<AiStatus>("/api/ai/status"),
     staleTime: 1000 * 60,
   });
 }
@@ -168,5 +174,42 @@ export function useAiSettings() {
   return useQuery({
     queryKey: ["ai-settings"],
     queryFn: () => apiGet<AiSettings>("/api/settings/ai"),
+  });
+}
+
+export interface TripDayRow {
+  id: string;
+  date: string;
+  dayIndex: number;
+  parkId: number | null;
+  parkName: string | null;
+  hopping: boolean;
+  secondParkId: number | null;
+  secondParkName: string | null;
+  switchTime: string | null;
+  planId?: string | null;
+  plan?: { id: string; summary: string | null; itinerary: unknown; input: unknown } | null;
+}
+
+export interface TripRow {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  days: TripDayRow[];
+}
+
+export function useTrips() {
+  return useQuery({
+    queryKey: ["trips"],
+    queryFn: () => apiGet<{ trips: TripRow[] }>("/api/trips"),
+  });
+}
+
+export function useTrip(id: string | undefined) {
+  return useQuery({
+    queryKey: ["trip", id],
+    queryFn: () => apiGet<{ trip: TripRow }>(`/api/trips/${id}`),
+    enabled: Boolean(id),
   });
 }

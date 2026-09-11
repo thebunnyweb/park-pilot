@@ -15,6 +15,14 @@ export async function GET(
     const { id } = await params;
     const p = await owned(id, userId);
     if (!p) return json({ error: "Not found" }, 404);
+
+    const tripDay = p.tripDayId
+      ? await prisma.tripDay.findUnique({
+          where: { id: p.tripDayId },
+          include: { trip: true },
+        })
+      : null;
+
     return json({
       plan: {
         id: p.id,
@@ -26,6 +34,7 @@ export async function GET(
         summary: p.summary,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
+        trip: tripDay ? { id: tripDay.trip.id, name: tripDay.trip.name } : null,
       },
     });
   } catch (err) {

@@ -1,14 +1,26 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Loader2, RefreshCw, Save, Sparkles, Wand2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import {
+  ArrowLeft,
+  CalendarClock,
+  Loader2,
+  RefreshCw,
+  Save,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ConnectClaude } from "@/components/connect-claude";
 import { ItineraryTimeline } from "@/components/itinerary-timeline";
+import { ParkHero } from "@/components/park-hero";
 import { ParkPicker } from "@/components/park-picker";
+import { ParkThemeProvider } from "@/components/park-theme-provider";
 import { RideSelector, type RideSelection } from "@/components/ride-selector";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,13 +35,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  apiSend,
-  type ParkRow,
-  useAiStatus,
-  useTravellers,
-} from "@/lib/hooks";
-import type { Itinerary, PlannerInput } from "@/lib/planner/types";
+import { apiSend, type ParkRow, useAiStatus, useTravellers, useTrip } from "@/lib/hooks";
+import type { Itinerary, PlannerInput, SecondPark } from "@/lib/planner/types";
 import { ageYears } from "@/lib/validations";
 import { useSelectedPark } from "@/lib/use-selected-park";
 
@@ -41,11 +48,26 @@ interface PlanResponse {
 }
 
 export default function PlannerPage() {
+  return (
+    <Suspense fallback={<Skeleton className="mx-auto h-64 max-w-lg" />}>
+      <PlannerInner />
+    </Suspense>
+  );
+}
+
+function PlannerInner() {
   const ai = useAiStatus();
   const { park: savedPark, select } = useSelectedPark();
   const { data: travellersData, isLoading: travellersLoading } = useTravellers();
   const router = useRouter();
   const qc = useQueryClient();
+  const searchParams = useSearchParams();
+
+  const tripId = searchParams.get("tripId");
+  const dayId = searchParams.get("dayId");
+  const { data: tripData } = useTrip(tripId ?? undefined);
+  const day = tripData?.trip.days.find((d) => d.id === dayId);
+  const dayIndex = day ? tripData!.trip.days.findIndex((d) => d.id === dayId) : -1;
 
   const [park, setPark] = useState<ParkRow | null>(savedPark);
   const today = new Date().toISOString().slice(0, 10);
@@ -55,12 +77,40 @@ export default function PlannerPage() {
   const [travellerIds, setTravellerIds] = useState<string[]>([]);
   const [lane, setLane] = useState<LaneStrategy>("multi");
   const [middayBreak, setMiddayBreak] = useState(true);
+  const [searchEnabled, setSearchEnabled] = useState(false);
   const [rides, setRides] = useState<RideSelection>({ mustDo: [], skip: [] });
   const [notes, setNotes] = useState("");
+  const [prefilled, setPrefilled] = useState(false);
 
   const [result, setResult] = useState<PlanResponse | null>(null);
   const [busy, setBusy] = useState<null | "generate" | "reoptimize" | "refine">(null);
   const [instruction, setInstruction] = useState("");
+
+  // Prefill everything from the trip day the first time it (and travellers) load.
+  useEffect(() => {
+    if (prefilled || !dayId) return;
+    if (!day || travellersLoading) return;
+    if (day.parkId && day.parkName) {
+      setPark({
+        id: day.parkId,
+        name: day.parkName,
+        country: null,
+        continent: null,
+        timezone: null,
+        operatorId: 0,
+        operatorName: "",
+        curated: false,
+      });
+    }
+    setDate(day.date);
+    setTravellerIds((travellersData?.travellers ?? []).map((t) => t.id));
+    setPrefilled(true);
+  }, [prefilled, dayId, day, travellersData, travellersLoading]);
+
+  const secondPark: SecondPark | undefined =
+    day?.hopping && day.secondParkId && day.secondParkName && day.switchTime
+      ? { parkId: day.secondParkId, parkName: day.secondParkName, switchTime: day.switchTime }
+      : undefined;
 
   if (ai.isLoading) {
     return <Skeleton className="mx-auto h-64 max-w-lg" />;
@@ -69,8 +119,9 @@ export default function PlannerPage() {
     return <ConnectClaude />;
   }
 
-  const effectivePark = park ?? savedPark;
+  const effectivePark = dayId ? park : (park ?? savedPark);
   const canGenerate = Boolean(effectivePark) && travellerIds.length > 0 && !busy;
+  const lockedToTrip = Boolean(dayId);
 
   async function generate(mode: "generate" | "reoptimize") {
     if (!effectivePark) return;
@@ -88,6 +139,9 @@ export default function PlannerPage() {
         laneStrategy: lane,
         middayBreak,
         notes: notes || undefined,
+        secondPark,
+        tripDayId: dayId ?? undefined,
+        searchEnabled,
       });
       setResult(res);
       toast.success(mode === "reoptimize" ? "Plan re-optimized with live waits" : "Plan ready");
@@ -127,24 +181,52 @@ export default function PlannerPage() {
         input: result.input,
         itinerary: result.itinerary,
         summary: result.itinerary.summary,
+        tripDayId: dayId ?? undefined,
       });
       qc.invalidateQueries({ queryKey: ["plans"] });
+      if (tripId) qc.invalidateQueries({ queryKey: ["trip", tripId] });
       toast.success("Plan saved");
-      router.push(`/plans/${id}`);
+      router.push(tripId ? `/trips/${tripId}` : `/plans/${id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     }
   }
 
   return (
-    <div className="space-y-6">
+    <ParkThemeProvider
+      parkId={effectivePark?.id ?? null}
+      parkName={effectivePark?.name ?? null}
+      className="space-y-6"
+    >
+      {tripId && (
+        <Link
+          href={`/trips/${tripId}`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> {tripData?.trip.name ?? "Back to trip"}
+        </Link>
+      )}
+
       <div>
-        <h1 className="text-2xl font-semibold">AI touring planner</h1>
+        <h1 className="text-2xl font-semibold">
+          {lockedToTrip ? `Day ${dayIndex + 1} plan` : "AI touring planner"}
+        </h1>
         <p className="text-sm text-muted-foreground">
           {ai.data?.model ? `Powered by ${ai.data.model}. ` : ""}
           Live waits + your travellers → a minute-by-minute plan.
         </p>
+        {secondPark && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline">Park hopping</Badge>
+            <span className="text-xs text-muted-foreground">
+              {effectivePark?.name ?? "Park 1"} until {secondPark.switchTime}, then{" "}
+              {secondPark.parkName}
+            </span>
+          </div>
+        )}
       </div>
+
+      {effectivePark && <ParkHero parkId={effectivePark.id} parkName={effectivePark.name} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
         <Card className="h-fit">
@@ -154,15 +236,30 @@ export default function PlannerPage() {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Park</Label>
-              <ParkPicker
-                value={effectivePark}
-                onChange={(p) => {
-                  setPark(p);
-                  select(p);
-                  setRides({ mustDo: [], skip: [] });
-                  setResult(null);
-                }}
-              />
+              {lockedToTrip ? (
+                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                  {effectivePark?.name ?? "No park set for this day"}
+                </div>
+              ) : (
+                <ParkPicker
+                  value={effectivePark}
+                  onChange={(p) => {
+                    setPark(p);
+                    select(p);
+                    setRides({ mustDo: [], skip: [] });
+                    setResult(null);
+                  }}
+                />
+              )}
+              {lockedToTrip && (
+                <p className="text-xs text-muted-foreground">
+                  Set on the{" "}
+                  <Link href={`/trips/${tripId}`} className="underline">
+                    trip page
+                  </Link>
+                  .
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="date">Date</Label>
@@ -170,7 +267,8 @@ export default function PlannerPage() {
                 id="date"
                 type="date"
                 value={date}
-                min={today}
+                min={lockedToTrip ? undefined : today}
+                disabled={lockedToTrip}
                 onChange={(e) => setDate(e.target.value)}
               />
             </div>
@@ -240,13 +338,30 @@ export default function PlannerPage() {
               </Select>
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={middayBreak}
-                onCheckedChange={(v) => setMiddayBreak(Boolean(v))}
-              />
-              Plan a midday break / nap
-            </label>
+            {!secondPark && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={middayBreak}
+                  onCheckedChange={(v) => setMiddayBreak(Boolean(v))}
+                />
+                Plan a midday break / nap
+              </label>
+            )}
+
+            {ai.data?.supportsSearch && (
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={searchEnabled}
+                    onCheckedChange={(v) => setSearchEnabled(Boolean(v))}
+                  />
+                  Include live search — events, hidden gems, photo spots, shopping
+                </label>
+                {searchEnabled && ai.data.searchNote && (
+                  <p className="pl-6 text-xs text-muted-foreground">{ai.data.searchNote}</p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="notes">Anything else?</Label>
@@ -329,6 +444,14 @@ export default function PlannerPage() {
               <ItineraryTimeline
                 blocks={result.itinerary.blocks}
                 warnings={result.itinerary.warnings}
+                parkNames={
+                  secondPark
+                    ? {
+                        [result.itinerary.parkId]: result.itinerary.parkName,
+                        [secondPark.parkId]: secondPark.parkName,
+                      }
+                    : undefined
+                }
               />
 
               <Card>
@@ -358,6 +481,6 @@ export default function PlannerPage() {
           )}
         </div>
       </div>
-    </div>
+    </ParkThemeProvider>
   );
 }

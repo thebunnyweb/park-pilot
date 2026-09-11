@@ -2,7 +2,9 @@
 
 import { CalendarClock, MapPin } from "lucide-react";
 import Link from "next/link";
+import { ParkHero } from "@/components/park-hero";
 import { ParkPicker } from "@/components/park-picker";
+import { ParkThemeProvider } from "@/components/park-theme-provider";
 import { WaitBoard } from "@/components/wait-board";
 import { Button } from "@/components/ui/button";
 import { useSelectedPark } from "@/lib/use-selected-park";
@@ -11,7 +13,7 @@ export default function DashboardPage() {
   const { park, select, ready } = useSelectedPark();
 
   return (
-    <div className="space-y-6">
+    <ParkThemeProvider parkId={park?.id ?? null} parkName={park?.name ?? null} className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Live wait times</h1>
@@ -45,19 +47,14 @@ export default function DashboardPage() {
 
       {park && (
         <>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4" />
-            {park.name}
-            {park.country ? ` · ${park.country}` : ""}
-            {park.curated && (
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                Curated data
-              </span>
-            )}
-          </div>
+          <ParkHero
+            parkId={park.id}
+            parkName={park.name}
+            subtitle={park.country ? `${park.country}${park.curated ? " · Curated data" : ""}` : undefined}
+          />
           <WaitBoard parkId={park.id} />
         </>
       )}
-    </div>
+    </ParkThemeProvider>
   );
 }

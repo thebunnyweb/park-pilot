@@ -13,16 +13,27 @@ export interface ValidationResult {
 /**
  * Deterministic sanity pass over an AI-generated itinerary. It repairs obviously
  * malformed data and surfaces (not silently drops) anything that looks wrong so
- * the user can judge it.
+ * the user can judge it. On a park-hopping day, `secondParkLiveRides` lets a
+ * block validate against whichever park it's actually tagged with.
  */
 export function validateItinerary(
   rawBlocks: unknown,
   input: PlannerInput,
   liveRides: LiveRide[],
+  secondParkLiveRides?: LiveRide[],
 ): ValidationResult {
   const warnings: string[] = [];
-  const overlay = getOverlay(input.parkId);
-  const rideById = new Map(liveRides.map((r) => [r.id, r]));
+
+  const rideMapsByPark = new Map<number, Map<number, LiveRide>>([
+    [input.parkId, new Map(liveRides.map((r) => [r.id, r]))],
+  ]);
+  if (input.secondPark && secondParkLiveRides) {
+    rideMapsByPark.set(
+      input.secondPark.parkId,
+      new Map(secondParkLiveRides.map((r) => [r.id, r])),
+    );
+  }
+
   const minHeight = input.travellers
     .map((t) => t.heightInInches)
     .filter((h): h is number => typeof h === "number")
@@ -56,11 +67,13 @@ export function validateItinerary(
     prevEnd = Math.max(prevEnd, endH);
 
     const rideId = typeof b.rideId === "number" ? b.rideId : undefined;
+    const parkId = typeof b.parkId === "number" ? b.parkId : input.parkId;
     if (rideId !== undefined) {
-      const live = rideById.get(rideId);
+      const live = rideMapsByPark.get(parkId)?.get(rideId);
       if (!live) {
         warnings.push(`"${b.title}" references a ride id not on today's live list.`);
       }
+      const overlay = getOverlay(parkId);
       const o = overlay?.[rideId];
       if (o && o.heightIn > 0 && minHeight !== null && minHeight < o.heightIn) {
         warnings.push(
@@ -80,6 +93,7 @@ export function validateItinerary(
       type: normalizeType(b.type),
       title: String(b.title ?? "Untitled"),
       rideId,
+      parkId: input.secondPark ? parkId : undefined,
       land: b.land ? String(b.land) : undefined,
       projectedWaitMin:
         typeof b.projectedWaitMin === "number" ? Math.round(b.projectedWaitMin) : undefined,
@@ -104,11 +118,28 @@ export function validateItinerary(
     warnings.push("You asked for a midday break but the plan has none.");
   }
 
+  if (input.secondPark && !blocks.some((b) => b.parkId === input.secondPark!.parkId)) {
+    warnings.push(`This was a park-hopping day but no blocks are at ${input.secondPark.parkName}.`);
+  }
+
   return { blocks, warnings };
 }
 
 function normalizeType(t: unknown): ItineraryBlock["type"] {
-  const allowed = ["arrive", "ride", "show", "meal", "break", "walk", "flex", "depart"];
+  const allowed = [
+    "arrive",
+    "ride",
+    "show",
+    "meal",
+    "break",
+    "walk",
+    "flex",
+    "depart",
+    "photo",
+    "shop",
+    "gem",
+    "event",
+  ];
   return (allowed.includes(String(t)) ? t : "flex") as ItineraryBlock["type"];
 }
 

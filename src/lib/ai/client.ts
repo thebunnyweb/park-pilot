@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ProviderId } from "./providers";
 
 export function makeClient(apiKey: string, baseUrl: string): OpenAI {
   return new OpenAI({
@@ -13,13 +14,51 @@ export function makeClient(apiKey: string, baseUrl: string): OpenAI {
   });
 }
 
+/**
+ * Reasoning models (Groq's gpt-oss, OpenAI's o-series/gpt-5) can spend most of
+ * max_tokens on an internal "thinking" trace before ever writing the JSON
+ * answer, which truncates the response mid-array and looks like a JSON parse
+ * bug. Capping reasoning effort reclaims that budget for the actual output.
+ * Only sent to providers/models known to support the field — an unknown
+ * provider silently ignoring or rejecting it is a bigger risk than skipping it.
+ */
+function reasoningEffortFor(provider: ProviderId, model: string): "low" | undefined {
+  // Groq's "compound" models are an agentic wrapper (search + code execution),
+  // not a plain reasoning model — leave their request shape alone.
+  if (model.startsWith("groq/compound")) return undefined;
+  if (provider === "groq" || provider === "openai") return "low";
+  if (provider === "openrouter" && /\bo\d|gpt-oss|thinking/i.test(model)) return "low";
+  return undefined;
+}
+
+/**
+ * Turn "search enabled" into the provider-specific request shape that grounds
+ * the answer in live web results — no separate search API/key needed.
+ *   - OpenRouter: any model gets grounding via the ":online" suffix.
+ *   - Groq: only the "compound" models have built-in search, so we switch to
+ *     one (preserving an already-compound model the user picked themselves).
+ * Other providers don't support this yet, so the model is returned unchanged.
+ */
+export function applySearch(provider: ProviderId, model: string, enabled: boolean): string {
+  if (!enabled) return model;
+  if (provider === "openrouter") {
+    return model.endsWith(":online") ? model : `${model}:online`;
+  }
+  if (provider === "groq") {
+    return model.startsWith("groq/compound") ? model : "groq/compound-mini";
+  }
+  return model;
+}
+
 interface JsonCallOpts {
   apiKey: string;
   baseUrl: string;
   model: string;
+  provider: ProviderId;
   system: string;
   user: string;
   maxTokens?: number;
+  searchEnabled?: boolean;
 }
 
 /**
@@ -31,21 +70,34 @@ export async function callJson<T>({
   apiKey,
   baseUrl,
   model,
+  provider,
   system,
   user,
-  maxTokens = 8000,
+  maxTokens = 16000,
+  searchEnabled = false,
 }: JsonCallOpts): Promise<{ data: T; model: string }> {
+  const effectiveModel = applySearch(provider, model, searchEnabled);
   const res = await makeClient(apiKey, baseUrl).chat.completions.create({
-    model,
+    model: effectiveModel,
     max_tokens: maxTokens,
+    reasoning_effort: reasoningEffortFor(provider, effectiveModel),
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
   });
 
-  const text = res.choices[0]?.message?.content ?? "";
-  return { data: extractJson<T>(text), model };
+  const choice = res.choices[0];
+  const text = choice?.message?.content ?? "";
+
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      "The model's response was cut off before it finished (hit the output token limit). " +
+        "Try again, pick fewer must-do rides, or switch to a model with a larger output limit.",
+    );
+  }
+
+  return { data: extractJson<T>(text), model: effectiveModel };
 }
 
 /** A cheap call used by Settings to confirm a key + model + endpoint work. */
@@ -81,5 +133,12 @@ function extractJson<T>(text: string): T {
   if (start === -1 || end === -1) {
     throw new Error("Model did not return JSON");
   }
-  return JSON.parse(candidate.slice(start, end + 1)) as T;
+  try {
+    return JSON.parse(candidate.slice(start, end + 1)) as T;
+  } catch {
+    throw new Error(
+      "The model's JSON was malformed (likely cut off mid-response). Try again — smaller/free " +
+        "models occasionally produce invalid JSON on a long plan.",
+    );
+  }
 }

@@ -1,7 +1,8 @@
 import { handleError, json, requireUserId } from "@/lib/api";
 import { callJson } from "@/lib/ai/client";
 import { getAiConfig } from "@/lib/ai/keys";
-import { REFINE_SYSTEM, refineUserMessage } from "@/lib/ai/prompts";
+import { refineSystem, refineUserMessage } from "@/lib/ai/prompts";
+import { PROVIDERS } from "@/lib/ai/providers";
 import { buildPlannerContext } from "@/lib/planner/context";
 import type { Itinerary, PlannerInput } from "@/lib/planner/types";
 import { validateItinerary } from "@/lib/planner/validate";
@@ -36,18 +37,26 @@ export async function POST(req: Request) {
       return json({ error: "Instruction is too long" }, 400);
     }
 
-    const live = flattenRides(await fetchQueueTimes(input.parkId));
-    const context = buildPlannerContext(input, live);
+    const [live, secondLive] = await Promise.all([
+      fetchQueueTimes(input.parkId).then(flattenRides),
+      input.secondPark
+        ? fetchQueueTimes(input.secondPark.parkId).then(flattenRides)
+        : Promise.resolve(undefined),
+    ]);
+    const context = buildPlannerContext(input, live, secondLive);
+    const searchEnabled = Boolean(input.searchEnabled) && Boolean(PROVIDERS[ai.provider]?.supportsSearch);
 
     const { data, model } = await callJson<ModelPlan>({
       apiKey: ai.key,
       model: ai.model,
       baseUrl: ai.baseUrl,
-      system: REFINE_SYSTEM,
+      provider: ai.provider,
+      searchEnabled,
+      system: refineSystem(searchEnabled),
       user: refineUserMessage(itinerary, instruction, context),
     });
 
-    const { blocks, warnings } = validateItinerary(data.blocks, input, live);
+    const { blocks, warnings } = validateItinerary(data.blocks, input, live, secondLive);
 
     const next: Itinerary = {
       ...itinerary,

@@ -11,6 +11,13 @@ export interface TravellerProfile {
 
 export type LaneStrategy = "none" | "multi" | "multi_plus_single";
 
+export interface SecondPark {
+  parkId: number;
+  parkName: string;
+  /** HH:mm local — when the day should hand off from the first park to this one. */
+  switchTime: string;
+}
+
 export interface PlannerInput {
   parkId: number;
   parkName: string;
@@ -23,6 +30,16 @@ export interface PlannerInput {
   laneStrategy: LaneStrategy;
   middayBreak: boolean;
   notes?: string;
+  /** Set when this day is a park-hopping day — the plan should cover both parks. */
+  secondPark?: SecondPark;
+  /** Links a generated plan back to its slot in a multi-day trip. */
+  tripDayId?: string;
+  /**
+   * Ask the model to ground event/gem/photo-spot/shopping content in live web
+   * search, when the connected provider supports it (see lib/ai/providers.ts).
+   * Ignored (silently) if the provider can't do it.
+   */
+  searchEnabled?: boolean;
 }
 
 export type BlockType =
@@ -33,7 +50,11 @@ export type BlockType =
   | "break"
   | "walk"
   | "flex"
-  | "depart";
+  | "depart"
+  | "photo"
+  | "shop"
+  | "gem"
+  | "event";
 
 export interface ItineraryBlock {
   start: string; // HH:mm
@@ -41,6 +62,8 @@ export interface ItineraryBlock {
   type: BlockType;
   title: string;
   rideId?: number;
+  /** Which park this block is at — only meaningful/present on a park-hopping day. */
+  parkId?: number;
   land?: string;
   projectedWaitMin?: number;
   walkMinutes?: number;

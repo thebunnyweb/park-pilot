@@ -24,6 +24,12 @@ export const travellerSchema = z.object({
 export type TravellerInput = z.infer<typeof travellerSchema>;
 export type TravellerFormInput = z.input<typeof travellerSchema>;
 
+export const secondParkSchema = z.object({
+  parkId: z.number().int().positive(),
+  parkName: z.string().min(1),
+  switchTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+});
+
 export const plannerInputSchema = z.object({
   parkId: z.number().int().positive(),
   parkName: z.string().min(1),
@@ -36,6 +42,9 @@ export const plannerInputSchema = z.object({
   laneStrategy: z.enum(["none", "multi", "multi_plus_single"]).default("multi"),
   middayBreak: z.boolean().default(true),
   notes: z.string().max(500).optional(),
+  secondPark: secondParkSchema.optional(),
+  tripDayId: z.string().optional(),
+  searchEnabled: z.boolean().default(false),
 });
 export type PlannerFormInput = z.infer<typeof plannerInputSchema>;
 

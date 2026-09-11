@@ -23,6 +23,7 @@ interface PlanDetail {
     input: PlannerInput;
     itinerary: Itinerary;
     summary: string | null;
+    trip: { id: string; name: string } | null;
   };
 }
 
@@ -89,10 +90,10 @@ export default function PlanDetailPage() {
   return (
     <div className="space-y-5">
       <Link
-        href="/plans"
+        href={plan.trip ? `/trips/${plan.trip.id}` : "/plans"}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> All plans
+        <ArrowLeft className="h-4 w-4" /> {plan.trip ? plan.trip.name : "All plans"}
       </Link>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -129,6 +130,14 @@ export default function PlanDetailPage() {
         blocks={plan.itinerary.blocks}
         warnings={plan.itinerary.warnings}
         nowMinutes={nowMinutes}
+        parkNames={
+          plan.input.secondPark
+            ? {
+                [plan.parkId]: plan.parkName,
+                [plan.input.secondPark.parkId]: plan.input.secondPark.parkName,
+              }
+            : undefined
+        }
       />
     </div>
   );

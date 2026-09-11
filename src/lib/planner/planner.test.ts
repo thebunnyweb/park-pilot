@@ -45,17 +45,42 @@ describe("buildPlannerContext", () => {
   });
 
   it("marks the 38\" Mine Train ineligible for a 34\" party", () => {
-    const mineTrain = ctx.rides.find((r) => r.id === 129);
+    const mineTrain = ctx.park.rides.find((r) => r.id === 129);
     expect(mineTrain?.eligibleForWholeParty).toBe(false);
   });
 
   it("keeps a no-height family ride eligible and surfaces must-do first", () => {
-    expect(ctx.rides[0].id).toBe(136);
-    expect(ctx.rides.find((r) => r.id === 136)?.eligibleForWholeParty).toBe(true);
+    expect(ctx.park.rides[0].id).toBe(136);
+    expect(ctx.park.rides.find((r) => r.id === 136)?.eligibleForWholeParty).toBe(true);
   });
 
   it("includes curated park data for Magic Kingdom", () => {
-    expect(ctx.hasCuratedData).toBe(true);
+    expect(ctx.park.hasCuratedData).toBe(true);
+  });
+
+  it("has no secondPark on a non-hopping day", () => {
+    expect(ctx.secondPark).toBeUndefined();
+  });
+});
+
+describe("buildPlannerContext with park hopping", () => {
+  const hoppingInput: PlannerInput = {
+    ...baseInput,
+    secondPark: { parkId: 5, parkName: "Epcot", switchTime: "14:00" },
+  };
+  const secondLive: LiveRide[] = [
+    { id: 160, name: "Test Track", land: "World Discovery", is_open: true, wait_time: 30, last_updated: "2026-09-07T14:00:00Z" },
+  ];
+  const ctx = buildPlannerContext(hoppingInput, live, secondLive);
+
+  it("builds a secondPark block with its own rides and switch time", () => {
+    expect(ctx.secondPark?.id).toBe(5);
+    expect(ctx.secondPark?.switchTime).toBe("14:00");
+    expect(ctx.secondPark?.rides.find((r) => r.id === 160)).toBeTruthy();
+  });
+
+  it("keeps the first park's rides separate from the second's", () => {
+    expect(ctx.park.rides.some((r) => r.id === 160)).toBe(false);
   });
 });
 

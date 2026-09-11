@@ -5,12 +5,17 @@ An AI theme-park trip planner. Pick any of the ~130 parks on
 [queue-times.com](https://queue-times.com/), add your travellers, and get a
 minute-by-minute touring plan built from **today's live wait times**.
 
-- **Live wait board** for every park — grouped by land, colour-coded, auto-refreshing.
+- **Live wait board** for every park — grouped by land, colour-coded, auto-refreshing,
+  with a distinct visual identity (colour + icon motif) per park.
 - **Curated ride data** for the major US Disney & Universal parks (height limits,
   toddler-friendly, ride intensity, Lightning Lane) so plans for those parks are sharper.
+- **Multi-day trips** — set your dates, assign a park (or two, for a park-hopping day)
+  to each day, and build/save a plan per day from one trip view.
 - **AI touring planner**, bring your own key — Anthropic, OpenAI, Groq, Google Gemini,
   OpenRouter, or any OpenAI-compatible endpoint. Rope-drop order, Lightning Lane picks,
   geographic routing, midday breaks, Rider Switch for little kids, parade/fireworks anchors.
+- **Live-search concierge content** (Groq `compound` / OpenRouter `:online`) — hard-ticket
+  event warnings, hidden gems, photo spots, and current merch picks woven into the plan.
 - **Re-optimize** any plan against the current live waits, or **refine** it in plain
   English ("we're tired, cut the afternoon").
 - **Accounts**, saved travellers, saved plans, and a first-timer checklist that adapts

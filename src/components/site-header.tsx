@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FerrisWheel,
   Map,
+  MapPinned,
   Route,
   Settings,
   Users,
@@ -26,7 +27,8 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Live waits", icon: Map },
-  { href: "/planner", label: "Planner", icon: CalendarClock },
+  { href: "/trips", label: "Trips", icon: MapPinned },
+  { href: "/planner", label: "Quick plan", icon: CalendarClock },
   { href: "/plans", label: "My plans", icon: Route },
   { href: "/travellers", label: "Travellers", icon: Users },
   { href: "/checklist", label: "Checklist", icon: ClipboardCheck },

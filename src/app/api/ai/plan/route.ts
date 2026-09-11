@@ -1,7 +1,8 @@
 import { handleError, json, requireUserId } from "@/lib/api";
 import { callJson } from "@/lib/ai/client";
 import { getAiConfig } from "@/lib/ai/keys";
-import { PLANNER_SYSTEM, plannerUserMessage } from "@/lib/ai/prompts";
+import { plannerSystem, plannerUserMessage } from "@/lib/ai/prompts";
+import { PROVIDERS } from "@/lib/ai/providers";
 import { buildPlannerContext } from "@/lib/planner/context";
 import type { Itinerary, PlannerInput, TravellerProfile } from "@/lib/planner/types";
 import { validateItinerary } from "@/lib/planner/validate";
@@ -64,20 +65,32 @@ export async function POST(req: Request) {
       laneStrategy: form.laneStrategy,
       middayBreak: form.middayBreak,
       notes: form.notes,
+      secondPark: form.secondPark,
+      tripDayId: form.tripDayId,
+      searchEnabled: form.searchEnabled,
     };
 
-    const live = flattenRides(await fetchQueueTimes(form.parkId));
-    const context = buildPlannerContext(input, live);
+    const searchEnabled = form.searchEnabled && Boolean(PROVIDERS[ai.provider]?.supportsSearch);
+
+    const [live, secondLive] = await Promise.all([
+      fetchQueueTimes(form.parkId).then(flattenRides),
+      form.secondPark
+        ? fetchQueueTimes(form.secondPark.parkId).then(flattenRides)
+        : Promise.resolve(undefined),
+    ]);
+    const context = buildPlannerContext(input, live, secondLive);
 
     const { data, model } = await callJson<ModelPlan>({
       apiKey: ai.key,
       model: ai.model,
       baseUrl: ai.baseUrl,
-      system: PLANNER_SYSTEM,
+      provider: ai.provider,
+      searchEnabled,
+      system: plannerSystem(searchEnabled),
       user: plannerUserMessage(context),
     });
 
-    const { blocks, warnings } = validateItinerary(data.blocks, input, live);
+    const { blocks, warnings } = validateItinerary(data.blocks, input, live, secondLive);
 
     const itinerary: Itinerary = {
       parkId: input.parkId,

@@ -16,6 +16,13 @@ export interface ProviderDef {
   keyPlaceholder: string;
   keysUrl: string;
   note?: string;
+  /**
+   * Can this provider ground answers in live web search without a separate
+   * search API/key? Enabling it (see applySearch() in client.ts) rewrites the
+   * outgoing model id/request rather than adding a new integration.
+   */
+  supportsSearch?: boolean;
+  searchNote?: string;
 }
 
 export const PROVIDERS: Record<ProviderId, ProviderDef> = {
@@ -43,6 +50,8 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     keyPlaceholder: "gsk_…",
     keysUrl: "https://console.groq.com/keys",
     note: "Free tier, no card required. Groq deprecates models often — use \"Fetch models\" below to see what's currently live on your account.",
+    supportsSearch: true,
+    searchNote: "Uses Groq's \"compound\" model, which has built-in web search.",
   },
   google: {
     id: "google",
@@ -61,6 +70,8 @@ export const PROVIDERS: Record<ProviderId, ProviderDef> = {
     keyPlaceholder: "sk-or-…",
     keysUrl: "https://openrouter.ai/keys",
     note: "Routes to ~300 models, including free ones — see openrouter.ai/models?max_price=0",
+    supportsSearch: true,
+    searchNote: "Routes your model through OpenRouter's web plugin (small per-search surcharge).",
   },
   custom: {
     id: "custom",
