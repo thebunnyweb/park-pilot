@@ -32,6 +32,26 @@ function reasoningEffortFor(provider: ProviderId, model: string): "low" | undefi
 }
 
 /**
+ * Ask the API to guarantee syntactically valid JSON server-side, instead of
+ * relying purely on prompt instructions — the actual fix for "model did not
+ * return JSON" on providers that support it. Skipped for Groq's "compound"
+ * models (they orchestrate tool calls themselves and don't reliably support
+ * forced JSON mode alongside that) and for providers where support is
+ * unconfirmed (Anthropic/Google's OpenAI-compat layers, custom endpoints) —
+ * for those the tolerant text-based extraction below is the safety net.
+ */
+function jsonResponseFormatFor(
+  provider: ProviderId,
+  model: string,
+): OpenAI.Chat.Completions.ChatCompletionCreateParams["response_format"] {
+  if (model.startsWith("groq/compound")) return undefined;
+  if (provider === "groq" || provider === "openai" || provider === "openrouter") {
+    return { type: "json_object" };
+  }
+  return undefined;
+}
+
+/**
  * Turn "search enabled" into the provider-specific request shape that grounds
  * the answer in live web results — no separate search API/key needed.
  *   - OpenRouter: any model gets grounding via the ":online" suffix.
@@ -87,10 +107,12 @@ async function createChatCompletion(
     return await client.chat.completions.create(params);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+
     const cap = parseMaxTokensCap(msg);
     if (cap && params.max_tokens && cap < params.max_tokens) {
       return await client.chat.completions.create({ ...params, max_tokens: cap });
     }
+
     if (/^413\b|request entity too large|payload too large/i.test(msg)) {
       throw new Error(
         "The request to the model was too large for this provider to accept. This can happen " +
@@ -98,6 +120,16 @@ async function createChatCompletion(
           "fewer must-do rides, or switch to a different model/provider.",
       );
     }
+
+    // Some providers 400 on an unrecognized/unsupported response_format even
+    // though they otherwise speak the chat-completions shape — drop it and
+    // fall back to the tolerant text-based JSON extraction instead of failing.
+    if (params.response_format && /response_format|json_object|json_schema/i.test(msg)) {
+      const rest = { ...params };
+      delete rest.response_format;
+      return await client.chat.completions.create(rest);
+    }
+
     throw err;
   }
 }
@@ -133,6 +165,7 @@ export async function callJson<T>({
     model: effectiveModel,
     max_tokens: maxTokens,
     reasoning_effort: reasoningEffortFor(provider, effectiveModel),
+    response_format: jsonResponseFormatFor(provider, effectiveModel),
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -149,7 +182,7 @@ export async function callJson<T>({
     );
   }
 
-  return { data: extractJson<T>(text), model: effectiveModel };
+  return { data: extractJson<T>(text, choice?.finish_reason), model: effectiveModel };
 }
 
 /** A cheap call used by Settings to confirm a key + model + endpoint work. */
@@ -177,14 +210,24 @@ export async function listModels(apiKey: string, baseUrl: string): Promise<strin
   return ids;
 }
 
-function extractJson<T>(text: string): T {
+export function extractJson<T>(text: string, finishReason?: string | null): T {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1] : text;
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
+
   if (start === -1 || end === -1) {
-    throw new Error("Model did not return JSON");
+    const reasonNote = finishReason && finishReason !== "stop" ? ` (finish_reason: ${finishReason})` : "";
+    const trimmed = text.trim();
+    if (!trimmed) {
+      throw new Error(
+        `The model returned an empty response${reasonNote}. Try again, or switch to a different model.`,
+      );
+    }
+    const preview = trimmed.length > 240 ? `${trimmed.slice(0, 240)}…` : trimmed;
+    throw new Error(`Model did not return JSON${reasonNote} — it said: "${preview}"`);
   }
+
   try {
     return JSON.parse(candidate.slice(start, end + 1)) as T;
   } catch {
