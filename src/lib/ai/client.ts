@@ -91,6 +91,13 @@ async function createChatCompletion(
     if (cap && params.max_tokens && cap < params.max_tokens) {
       return await client.chat.completions.create({ ...params, max_tokens: cap });
     }
+    if (/^413\b|request entity too large|payload too large/i.test(msg)) {
+      throw new Error(
+        "The request to the model was too large for this provider to accept. This can happen " +
+          "on a park with a very long ride list — try again (the ride list is now capped), pick " +
+          "fewer must-do rides, or switch to a different model/provider.",
+      );
+    }
     throw err;
   }
 }

@@ -116,3 +116,32 @@ describe("validateItinerary", () => {
     expect(blocks).toHaveLength(0);
   });
 });
+
+describe("buildPlannerContext caps a very long ride list", () => {
+  // A park with 100+ attractions can push the JSON payload over a provider's
+  // request-size limit (this exact shape triggered a real 413 from Groq).
+  const manyRides: LiveRide[] = Array.from({ length: 120 }, (_, i) => ({
+    id: 1000 + i,
+    name: `Ride ${i}`,
+    land: "Land",
+    is_open: true,
+    wait_time: i,
+    last_updated: "2026-09-07T14:00:00Z",
+  }));
+  // A must-do buried near the end, by wait time (lowest), of a huge list.
+  const inputWithManyRides: PlannerInput = {
+    ...baseInput,
+    parkId: 999,
+    mustDoRideIds: [1005],
+  };
+
+  it("caps the rides sent to the model instead of sending everything", () => {
+    const ctx = buildPlannerContext(inputWithManyRides, manyRides);
+    expect(ctx.park.rides.length).toBeLessThan(manyRides.length);
+  });
+
+  it("keeps a must-do ride even though it would otherwise fall outside the cap", () => {
+    const ctx = buildPlannerContext(inputWithManyRides, manyRides);
+    expect(ctx.park.rides.some((r) => r.id === 1005 && r.mustDo)).toBe(true);
+  });
+});

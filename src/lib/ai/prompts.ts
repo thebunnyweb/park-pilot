@@ -99,7 +99,7 @@ export function plannerSystem(searchEnabled: boolean): string {
 export function plannerUserMessage(ctx: PlannerContext): string {
   return `Build the plan for this context. The current local time is ${new Date().toLocaleTimeString(
     "en-US",
-  )} and "demandNow" is the relative crowd level right now.\n\n${JSON.stringify(ctx, null, 1)}`;
+  )} and "demandNow" is the relative crowd level right now.\n\n${JSON.stringify(ctx)}`;
 }
 
 const REFINE_BASE = `You revise an existing theme-park itinerary based on a short instruction from the
@@ -129,8 +129,8 @@ export function refineUserMessage(
   return `Instruction: ${instruction}
 
 Current itinerary:
-${JSON.stringify({ blocks: itinerary.blocks, summary: itinerary.summary }, null, 1)}
+${JSON.stringify({ blocks: itinerary.blocks, summary: itinerary.summary })}
 
 Fresh live context (use updated waits if you re-sequence anything):
-${JSON.stringify(liveContext, null, 1)}`;
+${JSON.stringify(liveContext)}`;
 }

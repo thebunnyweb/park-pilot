@@ -4,6 +4,8 @@ import type { LiveRide } from "@/lib/queue-times";
 import { CROWD_CURVE_NOTE, relativeDemand } from "./crowd-curve";
 import type { PlannerInput } from "./types";
 
+const MAX_RIDES_IN_CONTEXT = 70;
+
 export interface ContextRide {
   id: number;
   name: string;
@@ -108,6 +110,12 @@ function buildParkBlock(
     return (b.priority ?? 0) - (a.priority ?? 0) || b.liveWait - a.liveWait;
   });
 
+  // Some operators (Six Flags, Cedar Fair parks) list 100+ attractions —
+  // uncapped, that JSON payload can trip a provider's request-size limit
+  // (seen as a raw 413 from Groq). Must-dos sort first, so this only ever
+  // drops the least useful tail: low-priority, currently-closed extras.
+  const cappedRides = rides.length > MAX_RIDES_IN_CONTEXT ? rides.slice(0, MAX_RIDES_IN_CONTEXT) : rides;
+
   return {
     id: parkId,
     name: parkName,
@@ -116,7 +124,7 @@ function buildParkBlock(
     landAdjacency: meta.landAdjacency,
     events: meta.events,
     parkNotes: meta.notes,
-    rides,
+    rides: cappedRides,
     hasCuratedData: overlay !== null,
   };
 }
